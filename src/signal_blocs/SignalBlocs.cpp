@@ -29,6 +29,7 @@ void SignalBlocs::initBlocks() {
 void SignalBlocs::displayBlockStates() {
     for (int i = 0; i < NumberOfBlocks; i++) {
         int pinState = digitalRead(BlockPins[i]);
+        Serial.print(pinState);
         const int sensorAddress = BaseAdd + 1 + i;
 
         if (LastBlockState[i] != pinState) {  // Detect state change
