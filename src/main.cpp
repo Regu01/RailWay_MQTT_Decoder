@@ -21,13 +21,6 @@ MqttClient mqttClient(mqtt_server, 1883, mqtt_user, mqtt_password);
 // Initialisation du module SignalBlocs
 SignalBlocs signalBlocs(1, &mqttClient);
 
-///// TEMP /////
-
-#define pubbksr "trains/track/sensor/"
-
-///// TEMP /////
-
-
 
 
 
@@ -72,57 +65,3 @@ void loop() {
     signalBlocs.displayBlockStates();
     delay(100);
 }
-
-
-
-
-
-
-
-
-
-
-
-// void CheckBlocks() {
-//     for (int i = 0; i < NumberOfBlocks; i++) {
-//         updateBlockState(i);
-//     }
-// }
-
-// void updateBlockState(int blockIndex) {
-//     bool isBlockActive = !digitalRead(BlockPins[blockIndex]);
-    
-//     if (isBlockActive) {
-//         handleBlockActive(blockIndex);
-//     } else {
-//         handleBlockInactive(blockIndex);
-//     }
-// }
-
-// void handleBlockActive(int blockIndex) {
-//     BlockDebounce[blockIndex] = BlockDebounceThreshold;
-//     if (LastBlockState[blockIndex] != 1) {
-//         LastBlockState[blockIndex] = 1;
-//         sendBlock(blockIndex);
-//     }
-// }
-
-// void handleBlockInactive(int blockIndex) {
-//     if (BlockDebounce[blockIndex] > 0) {
-//         BlockDebounce[blockIndex]--;
-//     } else {
-//         if (LastBlockState[blockIndex] != 0) {
-//             LastBlockState[blockIndex] = 0;
-//             sendBlock(blockIndex);
-//         }
-//     }
-// }
-
-// void sendBlock(int blockToSend) {
-//     const int sensorAddress = BaseAdd + 1 + blockToSend;
-//     const char* state = LastBlockState[blockToSend] ? "ACTIVE" : "INACTIVE";
-    
-//     Serial.print("SensorAddress: ");
-//     Serial.println(sensorAddress);
-//     Serial.println(state);
-// }
