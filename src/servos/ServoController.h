@@ -12,18 +12,21 @@ public:
 
     void begin(TwoWire* wire = &Wire);
     void publishAll(class MqttClient& client);  // publish current state for all servos
+    void setErrorPublisher(MqttClient* client, const char* topic); // optional MQTT error reporting
 
     // MQTT handlers
     bool handleTrackMessage(const char* topic, const char* payload);   // trains/track/turnout/<globalId>
     bool handleConfigMessage(const char* topic, const char* payload);  // trains/config/servo/<globalId> JSON: {"closed":70,"thrown":110}
 
-    void sendAll();  // push current states to the ATmega
+    bool sendAll();  // push current states to the ATmega, false on I2C error
 
 private:
     uint8_t _boardId;
     uint8_t _i2cAddress;
     uint8_t _servoCount;
     TwoWire* _wire = nullptr;
+    MqttClient* _mqtt = nullptr;
+    const char* _errTopic = nullptr;
 
     static constexpr uint8_t DEFAULT_CLOSED = 70;
     static constexpr uint8_t DEFAULT_THROWN = 110;

@@ -16,6 +16,7 @@ MqttClient::MqttClient(const char* server, int port, const char* user, const cha
 
 void MqttClient::connect() {
     _reconnectDelay = MQTT_RECONNECT_BASE_DELAY;
+    _lastReconnectAttempt = 0;
     reconnectOnce(true);
 }
 
@@ -30,6 +31,12 @@ bool MqttClient::reconnectOnce(bool logOnFailure) {
     if (_client.connected()) {
         return true;
     }
+
+    unsigned long now = millis();
+    if (now - _lastReconnectAttempt < _reconnectDelay) {
+        return false;
+    }
+    _lastReconnectAttempt = now;
 
     blinkDuringConnection();
     bool connected = false;
@@ -48,8 +55,11 @@ bool MqttClient::reconnectOnce(bool logOnFailure) {
     }
 
     if (logOnFailure) {
-        Log.error("Failed to connect to MQTT. State: %d" CR, _client.state());
+        Log.error("Failed to connect to MQTT. State: %d. Next retry in %lu ms" CR, _client.state(), _reconnectDelay);
     }
+
+    unsigned long nextDelay = _reconnectDelay * 2;
+    _reconnectDelay = nextDelay > MQTT_RECONNECT_MAX_DELAY ? MQTT_RECONNECT_MAX_DELAY : nextDelay;
 
     updateLed();
     return false;
@@ -114,19 +124,7 @@ void MqttClient::loop() {
         updateLed();
         return;
     }
-
-    unsigned long now = millis();
-    if (now - _lastReconnectAttempt >= _reconnectDelay) {
-        _lastReconnectAttempt = now;
-
-        if (reconnectOnce(false)) {
-            _reconnectDelay = MQTT_RECONNECT_BASE_DELAY;
-        } else {
-            unsigned long nextDelay = _reconnectDelay * 2;
-            _reconnectDelay = nextDelay > MQTT_RECONNECT_MAX_DELAY ? MQTT_RECONNECT_MAX_DELAY : nextDelay;
-        }
-    }
-
+    reconnectOnce(false);
     updateLed();
 }
 

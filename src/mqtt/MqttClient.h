@@ -1,6 +1,7 @@
 #ifndef MQTTCLIENT_H
 #define MQTTCLIENT_H
 
+#include "credentials.h"
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <ArduinoLog.h>

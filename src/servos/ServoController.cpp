@@ -1,4 +1,5 @@
 #include "ServoController.h"
+#include "credentials.h"
 #include <ArduinoLog.h>
 #include "mqtt/MqttClient.h"
 
@@ -15,6 +16,11 @@ ServoController::ServoController(uint8_t boardId, uint8_t i2cAddress, uint8_t se
 void ServoController::begin(TwoWire* wire) {
     _wire = wire;
     sendAll();
+}
+
+void ServoController::setErrorPublisher(MqttClient* client, const char* topic) {
+    _mqtt = client;
+    _errTopic = topic;
 }
 
 void ServoController::publishAll(MqttClient& client) {
@@ -46,7 +52,15 @@ bool ServoController::handleTrackMessage(const char* topic, const char* payload)
         return true; // no change
     }
     _isThrown[idx] = makeThrown;
-    sendAll();
+    if (!sendAll()) {
+        Log.error("Servo track write failed for id %u" CR, localId);
+        if (_mqtt && _errTopic && _mqtt->isConnected()) {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "servo track write failed id=%u", localId);
+            _mqtt->publish(_errTopic, buf);
+        }
+        return false;
+    }
     return true;
 }
 
@@ -66,19 +80,37 @@ bool ServoController::handleConfigMessage(const char* topic, const char* payload
     _closed[idx] = c;
     _thrown[idx] = t;
     Log.notice("Servo cfg: id %u closed=%u thrown=%u" CR, localId, c, t);
-    sendAll();
+    if (!sendAll()) {
+        Log.error("Servo cfg write failed for id %u" CR, localId);
+        if (_mqtt && _errTopic && _mqtt->isConnected()) {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "servo cfg write failed id=%u", localId);
+            _mqtt->publish(_errTopic, buf);
+        }
+        return false;
+    }
     return true;
 }
 
-void ServoController::sendAll() {
-    if (!_wire) return;
+bool ServoController::sendAll() {
+    if (!_wire) return false;
 
     _wire->beginTransmission(_i2cAddress);
     for (uint8_t i = 0; i < _servoCount; i++) {
         uint8_t angle = _isThrown[i] ? _thrown[i] : _closed[i];
         _wire->write(angle);
     }
-    _wire->endTransmission();
+    uint8_t res = _wire->endTransmission();
+    if (res != 0) {
+        Log.error("I2C sendAll failed to 0x%02X, code %u" CR, _i2cAddress, res);
+        if (_mqtt && _errTopic && _mqtt->isConnected()) {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "i2c err 0x%02X code %u", _i2cAddress, res);
+            _mqtt->publish(_errTopic, buf);
+        }
+        return false;
+    }
+    return true;
 }
 
 bool ServoController::parseTrackTopic(const char* topic, uint8_t& localId) const {

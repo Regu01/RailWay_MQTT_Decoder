@@ -1,6 +1,7 @@
 #ifndef WIFI_H
 #define WIFI_H
 
+#include "credentials.h"
 #include <WiFi.h>
 #include <ArduinoLog.h>
 

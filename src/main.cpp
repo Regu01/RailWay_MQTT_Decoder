@@ -54,6 +54,7 @@ SignalBlocs signalBlocs(1, &mqttClient);
 ServoController servoController(BOARD_ID, 0x08, 16);
 
 char STATUS_TOPIC[64];
+char LOG_TOPIC[80];
 
 void applyServoDefaults(bool publishToMqtt = false) {
     char topic[48];
@@ -98,7 +99,7 @@ void setup() {
 
     Serial.begin(115200);
     Wire.begin();
-    Log.begin(LOG_LEVEL_NOTICE, &Serial);
+    Log.begin(LOG_LEVEL, &Serial);
 
     pinMode(STATUS_LED_PIN, OUTPUT);
     digitalWrite(STATUS_LED_PIN, LOW); // off until connected
@@ -116,6 +117,8 @@ void setup() {
     Log.notice(F("-------------------------\n"));
     wifiManager.connect();
     snprintf(STATUS_TOPIC, sizeof(STATUS_TOPIC), "trains/status_card/ESP_DECODER_0%u", BOARD_ID);
+    snprintf(LOG_TOPIC, sizeof(LOG_TOPIC), "trains/status_card/ESP_DECODER_0%u/log", BOARD_ID);
+    servoController.setErrorPublisher(&mqttClient, LOG_TOPIC);
     mqttClient.setWill(STATUS_TOPIC, "offline", true, 1);
     mqttClient.connect();
     mqttClient.subscribe("trains/track/turnout/#");
