@@ -1,40 +1,48 @@
 #include "MqttClient.h"
 
-// Stockage de l'instance courante
+// Store the current instance so the static callback can forward properly
 MqttClient* mqttActiveInstance = nullptr;
 
-MqttClient::MqttClient(const char* server, int port, const char* user, const char* password)
-    : _server(server), _port(port), _user(user), _password(password), _client(_wifiClient)
+MqttClient::MqttClient(const char* server, int port, const char* user, const char* password, const char* clientId)
+    : _server(server), _port(port), _user(user), _password(password), _clientId(clientId), _client(_wifiClient)
 {
-    mqttActiveInstance = this;                    // on retient l'instance actuelle
+    mqttActiveInstance = this;
     _client.setServer(_server, _port);
-    _client.setCallback(internalCallback);        // redirection du callback
+    _client.setCallback(internalCallback);
 
-    // Init LED MQTT
     pinMode(MQTT_LED_PIN, OUTPUT);
-    digitalWrite(MQTT_LED_PIN, LOW);
+    digitalWrite(MQTT_LED_PIN, HIGH); // LED OFF at startup (active LOW)
 }
 
 void MqttClient::connect() {
-    Log.notice("Connecting to MQTT server: %s:%d" CR, _server, _port);
-    reconnect();
+    _reconnectDelay = MQTT_RECONNECT_BASE_DELAY;
+    reconnectOnce(true);
 }
 
-void MqttClient::reconnect() {
-    while (!_client.connected()) {
-        Log.notice("Attempting MQTT connection..." CR);
+bool MqttClient::reconnectOnce(bool logOnFailure) {
+    if (_client.connected()) {
+        return true;
+    }
 
-        blinkDuringConnection(); 
+    blinkDuringConnection();
+    if (_client.connect(_clientId, _user, _password)) {
+        Log.notice("Connected to MQTT broker." CR);
+        resubscribeStoredTopics();
+        _reconnectDelay = MQTT_RECONNECT_BASE_DELAY;
+        updateLed();
+        return true;
+    }
 
-        if (_client.connect("ESP8266Client", _user, _password)) {
-            Log.notice("Connected to MQTT broker." CR);
-        } else {
-            Log.error("Failed to connect to MQTT. Retrying in 5 seconds..." CR);
-            delay(5000);
-        }
+    if (logOnFailure) {
+        Log.error("Failed to connect to MQTT. State: %d" CR, _client.state());
     }
 
     updateLed();
+    return false;
+}
+
+void MqttClient::reconnect() {
+    reconnectOnce(false);
 }
 
 void MqttClient::disconnect() {
@@ -58,6 +66,21 @@ void MqttClient::publish(const char* topic, const char* message) {
 }
 
 void MqttClient::subscribe(const char* topic) {
+    if (!topic) {
+        return;
+    }
+
+    bool known = false;
+    for (auto& t : _subscriptions) {
+        if (t.equals(topic)) {
+            known = true;
+            break;
+        }
+    }
+    if (!known) {
+        _subscriptions.emplace_back(topic);
+    }
+
     if (_client.connected()) {
         _client.subscribe(topic);
         Log.notice("Subscribed to topic: %s" CR, topic);
@@ -73,7 +96,24 @@ bool MqttClient::isConnected() {
 void MqttClient::loop() {
     if (_client.connected()) {
         _client.loop();
+        _reconnectDelay = MQTT_RECONNECT_BASE_DELAY;
+        updateLed();
+        return;
     }
+
+    unsigned long now = millis();
+    if (now - _lastReconnectAttempt >= _reconnectDelay) {
+        _lastReconnectAttempt = now;
+
+        if (reconnectOnce(false)) {
+            _reconnectDelay = MQTT_RECONNECT_BASE_DELAY;
+        } else {
+            unsigned long nextDelay = _reconnectDelay * 2;
+            _reconnectDelay = nextDelay > MQTT_RECONNECT_MAX_DELAY ? MQTT_RECONNECT_MAX_DELAY : nextDelay;
+        }
+    }
+
+    updateLed();
 }
 
 // --- CALLBACK MQTT ---
@@ -88,15 +128,21 @@ void MqttClient::internalCallback(char* topic, byte* payload, unsigned int lengt
     }
 }
 
+void MqttClient::resubscribeStoredTopics() {
+    for (auto& t : _subscriptions) {
+        _client.subscribe(t.c_str());
+    }
+}
+
 // --- LED MQTT ---
 
 void MqttClient::updateLed() {
-    digitalWrite(MQTT_LED_PIN, _client.connected() ? HIGH : LOW);
+    digitalWrite(MQTT_LED_PIN, _client.connected() ? LOW : HIGH); // Active LOW
 }
 
 void MqttClient::blinkDuringConnection() {
-    digitalWrite(MQTT_LED_PIN, HIGH);
-    delay(BLINK_DELAY);
     digitalWrite(MQTT_LED_PIN, LOW);
+    delay(BLINK_DELAY);
+    digitalWrite(MQTT_LED_PIN, HIGH);
     delay(BLINK_DELAY);
 }

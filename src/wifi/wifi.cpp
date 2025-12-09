@@ -4,20 +4,18 @@ WifiManager::WifiManager(const char* ssid, const char* password)
     : _ssid(ssid), _password(password)
 {
     pinMode(WIFI_LED_PIN, OUTPUT);
-    digitalWrite(WIFI_LED_PIN, HIGH); // LED OFF au démarrage
+    digitalWrite(WIFI_LED_PIN, HIGH); // LED OFF at startup (active LOW)
 }
 
 void WifiManager::connect() {
     Log.notice("Connecting to Wi-Fi: %s" CR, _ssid);
+
+    _retryAttempts = 0;
+    _currentReconnectDelay = RECONNECT_BASE_DELAY;
     WiFi.begin(_ssid, _password);
 
-    int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 10) {
-        Log.notice("Attempt %d: Waiting for connection..." CR, attempts + 1);
-
-        blinkDuringConnection();  // ← LED clignote pendant la connexion
-
-        attempts++;
+    for (int attempts = 0; attempts < MAX_RETRY_ATTEMPTS && WiFi.status() != WL_CONNECTED; attempts++) {
+        blinkDuringConnection();  // short blocking blink during initial connect
     }
 
     if (WiFi.status() == WL_CONNECTED) {
@@ -27,7 +25,37 @@ void WifiManager::connect() {
         Log.error("Failed to connect to Wi-Fi" CR);
     }
 
-    updateLed();  // LED ON si connectée, OFF sinon
+    updateLed();  // LED ON if connected, OFF otherwise
+}
+
+void WifiManager::maintain() {
+    unsigned long now = millis();
+
+    if (WiFi.status() == WL_CONNECTED) {
+        _retryAttempts = 0;
+        _currentReconnectDelay = RECONNECT_BASE_DELAY;
+        updateLed();
+        return;
+    }
+
+    if (now - _lastReconnectAttempt < _currentReconnectDelay) {
+        return;
+    }
+
+    _lastReconnectAttempt = now;
+    if (_retryAttempts < MAX_RETRY_ATTEMPTS) {
+        _retryAttempts++;
+    }
+
+    Log.warning("Wi-Fi lost. Reconnecting attempt %d" CR, _retryAttempts);
+    WiFi.disconnect();
+    WiFi.begin(_ssid, _password);
+
+    blinkDuringConnection();
+    updateLed();
+
+    unsigned long nextDelay = _currentReconnectDelay * 2;
+    _currentReconnectDelay = nextDelay > RECONNECT_MAX_DELAY ? RECONNECT_MAX_DELAY : nextDelay;
 }
 
 bool WifiManager::isConnected() {
@@ -69,7 +97,7 @@ void WifiManager::logConnectionDetails() {
 
 void WifiManager::updateLed() {
     if (WiFi.status() == WL_CONNECTED) {
-        digitalWrite(WIFI_LED_PIN, LOW);  // LED ON
+        digitalWrite(WIFI_LED_PIN, LOW);  // LED ON (active LOW)
     } else {
         digitalWrite(WIFI_LED_PIN, HIGH);   // LED OFF
     }

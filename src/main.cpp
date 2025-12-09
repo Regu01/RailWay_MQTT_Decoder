@@ -1,29 +1,16 @@
 #include <Arduino.h>
 
+#include "credentials.h"
 #include "wifi/wifi.h"
 #include "mqtt/MqttClient.h"
 #include "signal_blocs/SignalBlocs.h"
 
-// Déclaration des informations Wi-Fi
-const char *ssid = "Freebox-Peyon";
-const char *password = "Peyon17t*";
-const char *mqtt_server = "192.168.1.167";
-const char *mqtt_user = "mqtt_user";
-const char *mqtt_password = "mqtt_password";
+// Wi-Fi and MQTT instances
+WifiManager wifiManager(WIFI_SSID, WIFI_PASSWORD);
+MqttClient mqttClient(MQTT_SERVER, MQTT_PORT, MQTT_USER, MQTT_PASSWORD, MQTT_CLIENT_ID);
 
-
-
-
-// Initialisation du Wi-Fi et MQTT
-WifiManager wifiManager(ssid, password);
-MqttClient mqttClient(mqtt_server, 1883, mqtt_user, mqtt_password);
-
-// Initialisation du module SignalBlocs
+// SignalBlocs module
 SignalBlocs signalBlocs(1, &mqttClient);
-
-
-
-
 
 void setup() {
     delay(1000);
@@ -32,19 +19,12 @@ void setup() {
     Log.begin(LOG_LEVEL_NOTICE, &Serial);
 
     Log.notice(F("-------------------------\n"));
-    // Connexion au Wi-Fi
     wifiManager.connect();
-
-    // Connexion au serveur MQTT
     mqttClient.connect();
 
-    // Vérifier la connexion MQTT
     if (mqttClient.isConnected()) {
         Serial.println("MQTT client connected. Initializing blocks...");
-
-        // Initialiser les blocs
-        signalBlocs.initBlocks();  // Appel de la nouvelle fonction d'initialisation
-
+        signalBlocs.initBlocks();
         Serial.println("Blocks initialized.");
     } else {
         Serial.println("MQTT client not connected at setup.");
@@ -53,15 +33,18 @@ void setup() {
 }
 
 void loop() {
+    // Non-blocking maintenance of Wi-Fi and MQTT connections
+    wifiManager.maintain();
     mqttClient.loop();
 
     static unsigned long lastDisplayTime = 0;
-    if (millis() - lastDisplayTime > 5000) {
-        if (wifiManager.isConnected() && mqttClient.isConnected()) {
-        }
+    const unsigned long DISPLAY_INTERVAL = 5000;
 
-        lastDisplayTime = millis();
+    unsigned long now = millis();
+    if (now - lastDisplayTime >= DISPLAY_INTERVAL) {
+        lastDisplayTime = now;
     }
+
     signalBlocs.displayBlockStates();
-    delay(100);
+    delay(50);
 }

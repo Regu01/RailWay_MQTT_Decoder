@@ -4,14 +4,15 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <ArduinoLog.h>
+#include <vector>
 
-// Trick pour stocker l'instance active (nécessaire car PubSubClient impose un callback static)
+// Trick to store the active instance (PubSubClient imposes a static callback)
 class MqttClient;
 extern MqttClient* mqttActiveInstance;
 
 class MqttClient {
 public:
-    MqttClient(const char* server, int port, const char* user, const char* password);
+    MqttClient(const char* server, int port, const char* user, const char* password, const char* clientId);
 
     void connect();
     void disconnect();
@@ -20,7 +21,7 @@ public:
     bool isConnected();
     void loop();
 
-    // Pour que l'utilisateur puisse définir son callback
+    // Let callers define their own callback
     void setCallback(MQTT_CALLBACK_SIGNATURE);
 
 private:
@@ -28,19 +29,27 @@ private:
     int _port;
     const char* _user;
     const char* _password;
+    const char* _clientId;
 
     WiFiClient _wifiClient;
     PubSubClient _client;
 
-    // LED MQTT
+    // MQTT LED (active LOW to align with Wi-Fi LED)
     const int MQTT_LED_PIN = 19;
-    const int BLINK_DELAY = 400;
+    const int BLINK_DELAY = 200;
+    const unsigned long MQTT_RECONNECT_BASE_DELAY = 2000;
+    const unsigned long MQTT_RECONNECT_MAX_DELAY = 20000;
 
-    // Callback utilisateur stocké
+    unsigned long _lastReconnectAttempt = 0;
+    unsigned long _reconnectDelay = MQTT_RECONNECT_BASE_DELAY;
+
+    // Stored user callback
     MQTT_CALLBACK_SIGNATURE;
+    std::vector<String> _subscriptions;
 
-    // Callback interne static → redirige vers l'instance
     static void internalCallback(char* topic, byte* payload, unsigned int length);
+    void resubscribeStoredTopics();
+    bool reconnectOnce(bool logOnFailure);
 
     void reconnect();
     void updateLed();
