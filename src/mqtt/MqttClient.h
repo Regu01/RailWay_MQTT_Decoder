@@ -21,6 +21,8 @@ public:
     bool isConnected();
     void loop();
 
+    void setWill(const char* topic, const char* message, bool retain = true, uint8_t qos = 1);
+
     // Let callers define their own callback
     void setCallback(MQTT_CALLBACK_SIGNATURE);
 
@@ -46,6 +48,11 @@ private:
     // Stored user callback
     MQTT_CALLBACK_SIGNATURE;
     std::vector<String> _subscriptions;
+
+    const char* _willTopic = nullptr;
+    const char* _willMessage = nullptr;
+    bool _willRetain = true;
+    uint8_t _willQos = 1;
 
     static void internalCallback(char* topic, byte* payload, unsigned int length);
     void resubscribeStoredTopics();

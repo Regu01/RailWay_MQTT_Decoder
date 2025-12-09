@@ -3,17 +3,42 @@
 #include <PCA95x5.h>
 
 #include "credentials.h"
-#include "settings.h"
 #include "wifi/wifi.h"
 #include "mqtt/MqttClient.h"
 #include "signals/TurnoutSignals.h"
 #include "signal_blocs/SignalBlocs.h"
-#include "servos/ServoTester.h"
 #include "servos/ServoController.h"
 
 using Expander = PCA95x5::PCA95x5<>;
 Expander expanders[] = { Expander(), Expander(), Expander() };
 const uint8_t EXPANDER_ADDRS[] = { 0x20, 0x21, 0x22 };
+
+struct ServoDefault {
+    uint16_t id;
+    uint8_t closed;
+    uint8_t thrown;
+};
+
+const ServoDefault SERVO_DEFAULTS[] = {
+    {101, 70, 80},
+    {102, 40, 80},
+    {103, 70, 110},
+    {104, 70, 110},
+    {105, 70, 110},
+    {106, 70, 110},
+    {107, 70, 110},
+    {108, 70, 110},
+    {109, 70, 110},
+    {110, 70, 110},
+    {111, 70, 110},
+    {112, 70, 110},
+    {113, 70, 110},
+    {114, 70, 110},
+    {115, 70, 110},
+    {116, 70, 110},
+};
+
+const int STATUS_LED_PIN = 2; // Active HIGH indicator
 
 // Wi-Fi and MQTT instances
 WifiManager wifiManager(WIFI_SSID, WIFI_PASSWORD);
@@ -26,9 +51,22 @@ TurnoutSignals* turnoutSignalsPtr = &turnoutSignals;
 // SignalBlocs module
 SignalBlocs signalBlocs(1, &mqttClient);
 
-// Servo test helper (periodically toggles all servos to verify the chain)
-ServoTester servoTester(0x08, 16);
 ServoController servoController(BOARD_ID, 0x08, 16);
+
+char STATUS_TOPIC[64];
+
+void applyServoDefaults(bool publishToMqtt = false) {
+    char topic[48];
+    char payload[48];
+    for (size_t i = 0; i < (sizeof(SERVO_DEFAULTS) / sizeof(SERVO_DEFAULTS[0])); i++) {
+        snprintf(topic, sizeof(topic), "trains/config/servo/%u", SERVO_DEFAULTS[i].id);
+        snprintf(payload, sizeof(payload), "{\"closed\":%u,\"thrown\":%u}", SERVO_DEFAULTS[i].closed, SERVO_DEFAULTS[i].thrown);
+        servoController.handleConfigMessage(topic, payload);
+        if (publishToMqtt && mqttClient.isConnected()) {
+            mqttClient.publish(topic, payload);
+        }
+    }
+}
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
     // Copy payload to a null-terminated buffer
@@ -62,18 +100,23 @@ void setup() {
     Wire.begin();
     Log.begin(LOG_LEVEL_NOTICE, &Serial);
 
+    pinMode(STATUS_LED_PIN, OUTPUT);
+    digitalWrite(STATUS_LED_PIN, LOW); // off until connected
+
     // Init expanders and outputs
     for (size_t i = 0; i < (sizeof(expanders) / sizeof(expanders[0])); i++) {
         expanders[i].attach(Wire, EXPANDER_ADDRS[i]);
     }
     turnoutSignals.setupOutputs();
-    servoTester.begin(&Wire);
     servoController.begin(&Wire);
+    applyServoDefaults();
 
     mqttClient.setCallback(mqttCallback);
 
     Log.notice(F("-------------------------\n"));
     wifiManager.connect();
+    snprintf(STATUS_TOPIC, sizeof(STATUS_TOPIC), "trains/status_card/ESP_DECODER_0%u", BOARD_ID);
+    mqttClient.setWill(STATUS_TOPIC, "offline", true, 1);
     mqttClient.connect();
     mqttClient.subscribe("trains/track/turnout/#");
     mqttClient.subscribe("trains/config/servo/#");
@@ -81,6 +124,8 @@ void setup() {
     if (mqttClient.isConnected()) {
         turnoutSignals.publishAll(mqttClient, "THROWN"); // initial state
         servoController.publishAll(mqttClient);
+        applyServoDefaults(true);
+        mqttClient.publish(STATUS_TOPIC, "online");
         Serial.println("MQTT client connected. Initializing blocks...");
         signalBlocs.initBlocks();
         Serial.println("Blocks initialized.");
@@ -98,6 +143,8 @@ void loop() {
     static unsigned long lastDisplayTime = 0;
     static bool publishedRefs = false;
     static bool publishedServos = false;
+    static bool publishedServoConfig = false;
+    static bool publishedStatus = false;
     const unsigned long DISPLAY_INTERVAL = 5000;
 
     unsigned long now = millis();
@@ -112,9 +159,21 @@ void loop() {
             servoController.publishAll(mqttClient);
             publishedServos = true;
         }
+        if (!publishedServoConfig) {
+            applyServoDefaults(true);
+            publishedServoConfig = true;
+        }
+        if (!publishedStatus) {
+            mqttClient.publish(STATUS_TOPIC, "online");
+            publishedStatus = true;
+        }
+        digitalWrite(STATUS_LED_PIN, HIGH); // connected
     } else {
         publishedRefs = false;
         publishedServos = false;
+        publishedServoConfig = false;
+        publishedStatus = false;
+        digitalWrite(STATUS_LED_PIN, LOW);
     }
 
     if (now - lastDisplayTime >= DISPLAY_INTERVAL) {
@@ -122,7 +181,5 @@ void loop() {
     }
 
     signalBlocs.displayBlockStates();
-    // Comment out tester in production; keep active for validation only
-    // servoTester.tick();
     delay(100);
 }

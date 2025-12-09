@@ -19,13 +19,27 @@ void MqttClient::connect() {
     reconnectOnce(true);
 }
 
+void MqttClient::setWill(const char* topic, const char* message, bool retain, uint8_t qos) {
+    _willTopic = topic;
+    _willMessage = message;
+    _willRetain = retain;
+    _willQos = qos;
+}
+
 bool MqttClient::reconnectOnce(bool logOnFailure) {
     if (_client.connected()) {
         return true;
     }
 
     blinkDuringConnection();
-    if (_client.connect(_clientId, _user, _password)) {
+    bool connected = false;
+    if (_willTopic && _willMessage) {
+        connected = _client.connect(_clientId, _user, _password, _willTopic, _willQos, _willRetain, _willMessage);
+    } else {
+        connected = _client.connect(_clientId, _user, _password);
+    }
+
+    if (connected) {
         Log.notice("Connected to MQTT broker." CR);
         resubscribeStoredTopics();
         _reconnectDelay = MQTT_RECONNECT_BASE_DELAY;
