@@ -4,7 +4,7 @@ Mapping 14 groups of 3 LEDs (R/Y/G) to MQTT topics and PCA95x5 expanders.
 
 - Topic format: `trains/track/turnout/<globalId>`
 - `globalId = 20 + BOARD_ID*100 + localLedId`
-  - `BOARD_ID` from `include/settings.h`
+  - `BOARD_ID` from `include/credentials.h`
   - `localLedId` 1..42 (group 1 => 1-3, group 2 => 4-6, ... group 14 => 40-42)
 - Payloads: `CLOSED` turns LED ON, `THROWN` turns LED OFF (active LOW)
 

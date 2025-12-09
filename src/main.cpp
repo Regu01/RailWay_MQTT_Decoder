@@ -122,7 +122,7 @@ void setup() {
     mqttClient.subscribe("trains/config/servo/#");
 
     if (mqttClient.isConnected()) {
-        turnoutSignals.publishAll(mqttClient, "THROWN"); // initial state
+        turnoutSignals.publishAll(mqttClient, "CLOSED"); // initial state (LEDs off)
         servoController.publishAll(mqttClient);
         applyServoDefaults(true);
         mqttClient.publish(STATUS_TOPIC, "online");
@@ -152,7 +152,7 @@ void loop() {
     // Publish references once per MQTT connection
     if (mqttClient.isConnected()) {
         if (!publishedRefs) {
-            turnoutSignals.publishAll(mqttClient, "THROWN");
+            turnoutSignals.publishAll(mqttClient, "CLOSED");
             publishedRefs = true;
         }
         if (!publishedServos) {

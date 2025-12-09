@@ -71,10 +71,10 @@ bool TurnoutSignals::handleMqttMessage(const char* topic, const char* payload) {
     }
 
     bool on = false;
-    if (strcasecmp(payload, "CLOSED") == 0 || strcasecmp(payload, "ON") == 0 || strcmp(payload, "1") == 0) {
-        on = true;
-    } else if (strcasecmp(payload, "THROWN") == 0 || strcasecmp(payload, "OFF") == 0 || strcmp(payload, "0") == 0) {
-        on = false;
+    if (strcasecmp(payload, "CLOSED") == 0 || strcasecmp(payload, "OFF") == 0 || strcmp(payload, "0") == 0) {
+        on = false; // CLOSED => LED OFF
+    } else if (strcasecmp(payload, "THROWN") == 0 || strcasecmp(payload, "ON") == 0 || strcmp(payload, "1") == 0) {
+        on = true;  // THROWN => LED ON
     } else {
         return false; // Unknown payload
     }
